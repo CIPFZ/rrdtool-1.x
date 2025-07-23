@@ -22,15 +22,12 @@ int main(
 {
     const char **cargv = (const char **)argv;
     char *name=basename(argv[0]);
-    rrd_info_t *info;
 
     if (!strcmp(name, "rrdcreate")) {
         rrd_create(argc, cargv);
     }
     else if (!strcmp(name, "rrdinfo")) {
-         info=rrd_info(argc, cargv);
-         rrd_info_print(info);
-         rrd_info_free(info);
+         rrd_info(argc, cargv);
     }
     else {
         rrd_update(argc, cargv);

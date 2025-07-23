@@ -70,16 +70,19 @@ rrd_info_t *rrd_info(
     const char **argv)
 {
     struct optparse_long longopts[] = {
+        {"format", 'f', OPTPARSE_REQUIRED},
         {"daemon", 'd', OPTPARSE_REQUIRED},
         {"noflush", 'F', OPTPARSE_NONE},
         {0},
     };
     struct    optparse options;
     int       opt;
-    rrd_info_t *info;
+    rrd_info_t *info = NULL;
     char *opt_daemon = NULL;
+    char *opt_format = NULL;
     int status;
     int flushfirst = 1;
+    int output_format = 0; // 1: json (执行命令可更好的解析)
 
     optparse_init(&options, argc, argv);
     while ((opt = optparse_long(&options, longopts, NULL)) != -1) {
@@ -100,6 +103,19 @@ rrd_info_t *rrd_info(
             flushfirst = 0;
             break;
 
+        case 'f':
+            opt_format = strdup(options.optarg);
+            if (opt_format == NULL) {
+                rrd_set_error ("strdup failed.");
+                return NULL;
+            }
+            if (strcasecmp(opt_format, "json") != 0) {
+                rrd_set_error ("Currently only supports json format");
+                return NULL;
+            }
+            output_format = 1;
+            break;
+
         case '?':
             rrd_set_error("%s", options.errmsg);
             if (opt_daemon != NULL) {
@@ -110,7 +126,7 @@ rrd_info_t *rrd_info(
     } /* while (opt != -1) */
 
     if (options.argc - options.optind != 1) {
-        rrd_set_error ("Usage: rrdtool %s [--daemon |-d <addr> [--noflush|-F]] <file>",
+        rrd_set_error ("Usage: rrdtool %s [--format |-f <json> --daemon |-d <addr> [--noflush|-F]] <file>",
                 options.argv[0]);
         if (opt_daemon != NULL) {
             free (opt_daemon);
@@ -129,16 +145,213 @@ rrd_info_t *rrd_info(
     }
 
     rrdc_connect (opt_daemon);
-    if (rrdc_is_connected (opt_daemon))
+    if (rrdc_is_connected (opt_daemon)) {
         info = rrdc_info(options.argv[options.optind]);
-    else
-        info = rrd_info_r(options.argv[options.optind]);
+    } else {
+        // 这里简单处理 设置了 json 输出就只在控制台打印不进行 返回值处理
+        // 保证文件只打开一次
+        if (output_format == 1) {
+            // json 格式 - 使用 json 自己的 输出格式
+            rrd_info_json_print(options.argv[options.optind]);
+        } else {
+            info = rrd_info_r(options.argv[options.optind]);
+        }
+    }
 
     if (opt_daemon != NULL) {
     	free(opt_daemon);
     }
+
+    // 非自定义格式 按照默认打印
+    if (info != NULL) {
+        rrd_info_print(info);
+    }
+
     return (info);
 } /* rrd_info_t *rrd_info */
+
+/**
+ * 将rrd文件信息输出为 json 格式
+ * @param filename rrd文件
+ * @return
+ * exp: {
+ *   rrd_file: xxx,
+ *   rrd_version: xxx,
+ *   step: xxx,
+ *   last_update: xxx,
+ *   header_size: xxx,
+ *   dss: [
+ *     {
+ *       index: xxx,
+ *       name: xxx,
+ *       type: xxx,
+ *       cdef: xxx,
+ *       minimal_heartbeat: xxx,
+ *       min: xxx,
+ *       max: xxx,
+ *       last_ds: xxx,
+ *       value: xxx,
+ *       unknown_sec: xxx
+ *     }
+ *   ],
+ *   rras: [
+ *     {
+ *       cf: xxx,
+ *       rows: xxx,
+ *       cur_rows: xxx,
+ *       pdp_per_row: xxx,
+ *       alpha: xxx,
+ *       xff: xxx,
+ *       cdp_prep: [
+ *         {
+ *           value: xxx,
+ *           unknown_datapoints: xxx
+ *         }
+ *       ]
+ *     }
+ *   ]
+ * }
+ */
+int *rrd_info_json_print(const char *filename) {
+    rrd_t rrd;
+
+    rrd_init(&rrd);
+    rrd_file_t *rrd_file = rrd_open(filename, &rrd, RRD_READONLY | RRD_LOCK);
+    if (rrd_file == NULL)
+        goto err_free;
+
+    fprintf(stdout, "{");
+    // rrd 头信息
+    fprintf(stdout, "\"filename\": \"%s\",", filename);
+    fprintf(stdout, "\"rrd_version\": \"%s\",", rrd.stat_head->version);
+    fprintf(stdout, "\"step\": %lu,", rrd.stat_head->pdp_step);
+    fprintf(stdout, "\"last_update\": %ld,", rrd.live_head->last_up);
+    fprintf(stdout, "\"header_size\": %ld,", rrd_get_header_size(&rrd));
+
+    // ds 信息
+    fprintf(stdout, "\"dss\": [");
+    for (unsigned long i = 0; i < rrd.stat_head->ds_cnt; ++i) {
+        fprintf(stdout, "{");
+        fprintf(stdout, "\"index\": %lu,", i);
+        fprintf(stdout, "\"name\": \"%s\",", rrd.ds_def[i].ds_nam);
+        fprintf(stdout, "\"type\": \"%s\",", rrd.ds_def[i].dst);
+
+        enum dst_en current_ds = dst_conv(rrd.ds_def[i].dst);
+        switch (current_ds) {
+            case DST_CDEF: {
+                char *buffer = NULL;
+                rpn_compact2str((rpn_cdefds_t *) &(rrd.ds_def[i].par[DS_cdef]), rrd.ds_def, &buffer);
+                fprintf(stdout, "\"cdef\": \"%s\",", buffer);
+                free(buffer);
+            }
+            break;
+            default:
+                fprintf(stdout, "\"minimal_heartbeat\": %lu,", rrd.ds_def[i].par[DS_mrhb_cnt].u_cnt);
+                fprintf(stdout, "\"min\": %f,", rrd.ds_def[i].par[DS_min_val].u_val);
+                fprintf(stdout, "\"max\": %f,", rrd.ds_def[i].par[DS_max_val].u_val);
+                break;
+        }
+        fprintf(stdout, "\"last_ds\": \"%s\",", rrd.pdp_prep[i].last_ds);
+        fprintf(stdout, "\"value\": %f,", rrd.pdp_prep[i].scratch[PDP_val].u_val);
+        fprintf(stdout, "\"unknown_sec\": %lu", rrd.pdp_prep[i].scratch[PDP_unkn_sec_cnt].u_cnt);
+        fprintf(stdout, "}%s", i == rrd.stat_head->ds_cnt - 1 ? "" : ",");
+    }
+    fprintf(stdout, "],\n");
+
+    // rra 信息
+    fprintf(stdout, "\"rras\": [");
+    for (unsigned long i = 0; i < rrd.stat_head->rra_cnt; ++i) {
+        fprintf(stdout, "{");
+        fprintf(stdout, "\"index\": %lu,", i);
+        fprintf(stdout, "\"cf\": \"%s\",", rrd.rra_def[i].cf_nam);
+        fprintf(stdout, "\"rows\": %lu,", rrd.rra_def[i].row_cnt);
+        fprintf(stdout, "\"cur_row\": %lu,", rrd.rra_ptr[i].cur_row);
+        fprintf(stdout, "\"pdp_per_row\": %lu,", rrd.rra_def[i].pdp_cnt);
+
+        enum cf_en current_cf = rrd_cf_conv(rrd.rra_def[i].cf_nam);
+        switch (current_cf) {
+            case CF_HWPREDICT:
+            case CF_MHWPREDICT:
+                fprintf(stdout, "\"alpha\": %f,", rrd.rra_def[i].par[RRA_hw_alpha].u_val);
+                fprintf(stdout, "\"beta\": %f,", rrd.rra_def[i].par[RRA_hw_beta].u_val);
+                break;
+            case CF_SEASONAL:
+            case CF_DEVSEASONAL:
+                fprintf(stdout, "\"gamma\": %f,", rrd.rra_def[i].par[RRA_seasonal_gamma].u_val);
+                fprintf(stdout, "\"smoothing_window\": %f,",
+                        rrd.rra_def[i].par[RRA_seasonal_smoothing_window].u_val);
+                break;
+            case CF_FAILURES:
+                fprintf(stdout, "\"delta_pos\": %f,", rrd.rra_def[i].par[RRA_delta_pos].u_val);
+                fprintf(stdout, "\"delta_neg\": %f,", rrd.rra_def[i].par[RRA_delta_neg].u_val);
+                fprintf(stdout, "\"failure_threshold\": %f,", rrd.rra_def[i].par[RRA_failure_threshold].u_val);
+                fprintf(stdout, "\"window_length\": %f,", rrd.rra_def[i].par[RRA_window_len].u_val);
+                break;
+            case CF_DEVPREDICT:
+                break;
+            default:
+                fprintf(stdout, "\"xff\": %f,", rrd.rra_def[i].par[RRA_cdp_xff_val].u_val);
+                break;
+        }
+
+        fprintf(stdout, "\"cdp_prep\": [");
+        for (unsigned long ii = 0; ii < rrd.stat_head->ds_cnt; ++ii) {
+            fprintf(stdout, "{");
+            switch (current_cf) {
+                case CF_HWPREDICT:
+                case CF_MHWPREDICT:
+                    fprintf(stdout, "\"intercept\": %f,",
+                            rrd.cdp_prep[i * rrd.stat_head->ds_cnt + ii].scratch[CDP_hw_intercept].u_val);
+                    fprintf(stdout, "\"slope\": %f,", rrd.cdp_prep[i * rrd.stat_head->ds_cnt +
+                                                                   ii].scratch[CDP_hw_slope].u_val);
+                    fprintf(stdout, "\"NaN_count\": %lu,", rrd.cdp_prep[i * rrd.stat_head->ds_cnt +
+                                                                        ii].scratch[CDP_null_count].u_cnt);
+                    break;
+                case CF_SEASONAL:
+                    fprintf(stdout, "\"seasonal\": %f,", rrd.cdp_prep[i * rrd.stat_head->ds_cnt +
+                                                                      ii].scratch[CDP_hw_seasonal].u_val);
+                    break;
+                case CF_DEVSEASONAL:
+                    fprintf(stdout, "\"deviation\": %f,", rrd.cdp_prep[i * rrd.stat_head->ds_cnt +
+                                                                       ii].scratch[CDP_seasonal_deviation].u_val);
+                    break;
+                case CF_DEVPREDICT:
+                    break;
+                case CF_FAILURES: {
+                    unsigned long j;
+                    const char *violations_array = (char *) rrd.cdp_prep[i * rrd.stat_head->ds_cnt + ii].scratch;
+                    char history[MAX_FAILURES_WINDOW_LEN + 1];
+                    for (j = 0; j < rrd.rra_def[i].par[RRA_window_len].u_cnt; ++j) {
+                        history[j] = (violations_array[j] == 1) ? '1' : '0';
+                    }
+                    history[j] = '\0';
+                    fprintf(stdout, "\"history\": \"%s\",", history);
+                }
+                break;
+                default:
+                    fprintf(stdout, "\"value\": %f,", rrd.cdp_prep[i * rrd.stat_head->ds_cnt +
+                                                                   ii].scratch[CDP_val].u_val);
+                    fprintf(stdout, "\"unknown_datapoints\": %lu,", rrd.cdp_prep[i * rrd.stat_head->ds_cnt +
+                                ii].scratch[CDP_unkn_pdp_cnt].u_cnt);
+                    break;
+            }
+            fprintf(stdout, "\"index\": %lu", ii);
+            fprintf(stdout, "}%s", ii == rrd.stat_head->ds_cnt - 1 ? "" : ",");
+        }
+        fprintf(stdout, "]");
+        fprintf(stdout, "}%s", i == rrd.stat_head->rra_cnt - 1 ? "" : ",");
+    }
+    fprintf(stdout, "]");
+
+    // 补充结尾
+    fprintf(stdout, "}\n");
+
+    rrd_close(rrd_file);
+
+err_free:
+    rrd_free(&rrd);
+    return 0;
+}
 
 rrd_info_t *rrd_info_r(
     const char *filename)

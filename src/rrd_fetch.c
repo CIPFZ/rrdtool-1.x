@@ -65,7 +65,7 @@ int rrd_fetch(
     time_t *start,
     time_t *end,        /* which time frame do you want ?
                          * will be changed to represent reality */
-    unsigned long *step,    /* which stepsize do you want? 
+    unsigned long *step,    /* which stepsize do you want?
                              * will be changed to represent reality */
     unsigned long *ds_cnt,  /* number of data sources in file */
     char ***ds_namv,    /* names of data sources */
@@ -218,7 +218,7 @@ int rrd_fetch_r(
     time_t *start,
     time_t *end,        /* which time frame do you want ?
                          * will be changed to represent reality */
-    unsigned long *step,    /* which stepsize do you want? 
+    unsigned long *step,    /* which stepsize do you want?
                              * will be changed to represent reality */
     unsigned long *ds_cnt,  /* number of data sources in file */
     char ***ds_namv,    /* names of data_sources */
@@ -280,7 +280,7 @@ int rrd_fetch_fn(
     time_t *start,
     time_t *end,        /* which time frame do you want ?
                          * will be changed to represent reality */
-    unsigned long *step,    /* which stepsize do you want? 
+    unsigned long *step,    /* which stepsize do you want?
                              * will be changed to represent reality */
     unsigned long *ds_cnt,  /* number of data sources in file */
     char ***ds_namv,    /* names of data_sources */
@@ -347,14 +347,14 @@ int rrd_fetch_fn(
       if (
 	  /* if we found a direct match */
 	  (rratype == cf_idx)
-	  || 
-	  /*if we found a DS with interval 1 
+	  ||
+	  /*if we found a DS with interval 1
 	    and CF (requested,available) are MIN,MAX,AVERAGE,LAST
 	  */
-	  ( 
+	  (
 	      /* only if we are on interval 1 */
-	      (rrd.rra_def[i].pdp_cnt==1) 
-	      && ( 
+	      (rrd.rra_def[i].pdp_cnt==1)
+	      && (
 		  /* and requested CF is MIN,MAX,AVERAGE,LAST */
 		  (cf_idx == CF_MINIMUM)
 		  ||(cf_idx == CF_MAXIMUM)
@@ -493,7 +493,7 @@ int rrd_fetch_fn(
             rra_pointer = rrd.rra_ptr[chosen_rra].cur_row + 1 + start_offset;
 
         rra_pointer = rra_pointer % (signed) rrd.rra_def[chosen_rra].row_cnt;
-         
+
         if (rrd_seek(rrd_file, (rra_base + (rra_pointer * (*ds_cnt)
                                         * sizeof(rrd_value_t))),
                  SEEK_SET) != 0) {
@@ -505,7 +505,7 @@ int rrd_fetch_fn(
                 rra_base, rra_pointer);
 #endif
     }
-    
+
     /* step trough the array */
 
     for (i = start_offset;
@@ -534,7 +534,7 @@ int rrd_fetch_fn(
 #endif
             }
         } else {
-            /* OK we are inside the valid area but the pointer has to 
+            /* OK we are inside the valid area but the pointer has to
              * be wrapped*/
             if (rra_pointer >= (signed) rrd.rra_def[chosen_rra].row_cnt) {
                 rra_pointer -= rrd.rra_def[chosen_rra].row_cnt;
@@ -584,4 +584,239 @@ int rrd_fetch_fn(
   err_free:
     rrd_free(&rrd);
     return (-1);
+}
+
+int output_to_csv(const char *output_dir, unsigned long rra_idx, rrd_t rrd, rrd_file_t *rrd_file, off_t rra_base) {
+    unsigned long ds_cnt = rrd.stat_head->ds_cnt;
+    unsigned long pdp_step = rrd.stat_head->pdp_step;
+
+    rra_def_t *rra = &rrd.rra_def[rra_idx];
+    const rra_ptr_t *rra_ptr = &rrd.rra_ptr[rra_idx];
+    unsigned long rows = rra->row_cnt;
+    unsigned long pdp_per_row = rra->pdp_cnt;
+    unsigned long rra_step = pdp_step * pdp_per_row;
+    unsigned long base_time = rrd.live_head->last_up - (rows - 1) * rra_step;
+
+    printf("\n== RRA %lu (%s): step = %lus, rows = %lu ==\n", rra_idx, rra->cf_nam, rra_step, rows);
+
+    FILE *out = stdout;
+    char csv_path[512] = {0};
+
+    if (output_dir) {
+        snprintf(csv_path, sizeof(csv_path), "%s/rra_%lu_%s.csv", output_dir, rra_idx, rra->cf_nam);
+        out = fopen(csv_path, "w");
+        if (!out) {
+            fprintf(stderr, "Failed to open file %s: %s\n", csv_path, rrd_strerror(errno));
+            return -1;
+        }
+    }
+
+    // Header
+    fprintf(out, "timestamp");
+    for (unsigned long i = 0; i < ds_cnt; i++) {
+        fprintf(out, ",%s", rrd.ds_def[i].ds_nam);
+    }
+    fprintf(out, "\n");
+
+    for (unsigned long row = 0; row < rows; row++) {
+        unsigned long current_row = (rra_ptr->cur_row + 1 + row) % rows;
+        unsigned long timestamp = base_time + row * rra_step;
+
+        rrd_value_t *row_data = malloc(ds_cnt * sizeof(rrd_value_t));
+        if (!row_data) {
+            fprintf(stderr, "malloc failed at row %lu\n", row);
+            continue;
+        }
+
+        off_t row_offset = rra_base + current_row * ds_cnt * sizeof(rrd_value_t);
+        if (rrd_seek(rrd_file, row_offset, SEEK_SET) != 0 ||
+            rrd_read(rrd_file, row_data, ds_cnt * sizeof(rrd_value_t)) != (ssize_t)(ds_cnt * sizeof(rrd_value_t))) {
+            fprintf(stderr, "Failed to read row %lu of RRA %lu\n", row, rra_idx);
+            free(row_data);
+            continue;
+        }
+
+        fprintf(out, "%lu", timestamp);
+        for (unsigned long ds_idx = 0; ds_idx < ds_cnt; ds_idx++) {
+            if (isnan(row_data[ds_idx])) {
+                fprintf(out, ",NaN");
+            } else {
+                fprintf(out, ",%.6lf", row_data[ds_idx]);
+            }
+        }
+        fprintf(out, "\n");
+
+        if (out != stdout) {
+            fflush(out);
+        }
+
+        free(row_data);
+    }
+
+    if (output_dir && out != stdout) {
+        fclose(out);
+        printf("Write to file: %s\n", csv_path);
+    }
+
+    return 0;
+}
+
+int output_to_json(FILE *output, unsigned long rra_idx, rrd_t rrd, rrd_file_t *rrd_file, off_t rra_base) {
+    unsigned long ds_cnt = rrd.stat_head->ds_cnt;
+    unsigned long rra_cnt = rrd.stat_head->rra_cnt;
+    unsigned long pdp_step = rrd.stat_head->pdp_step;
+
+    rra_def_t *rra = &rrd.rra_def[rra_idx];
+    const rra_ptr_t *rra_ptr = &rrd.rra_ptr[rra_idx];
+    unsigned long rows = rra->row_cnt;
+    unsigned long pdp_per_row = rra->pdp_cnt;
+    unsigned long rra_step = pdp_step * pdp_per_row;
+    unsigned long base_time = rrd.live_head->last_up - (rows - 1) * rra_step;
+
+    fprintf(output, "{\"rra\": %lu,\"cf\": \"%s\",\"step\": %lu,\"rows\": {", rra_idx, rra->cf_nam, rra_step);
+
+    for (unsigned long row = 0; row < rows; row++) {
+        unsigned long current_row = (rra_ptr->cur_row + 1 + row) % rows;
+        unsigned long timestamp = base_time + row * rra_step;
+
+        rrd_value_t *row_data = malloc(ds_cnt * sizeof(rrd_value_t));
+        if (!row_data) {
+            fprintf(stderr, "malloc failed at row %lu\n", row);
+            continue;
+        }
+
+        off_t row_offset = rra_base + current_row * ds_cnt * sizeof(rrd_value_t);
+        if (rrd_seek(rrd_file, row_offset, SEEK_SET) != 0 ||
+            rrd_read(rrd_file, row_data, ds_cnt * sizeof(rrd_value_t)) != (ssize_t)(ds_cnt * sizeof(rrd_value_t))) {
+            fprintf(stderr, "Failed to read row %lu of RRA %lu\n", row, rra_idx);
+            free(row_data);
+            continue;
+            }
+
+        // timestamp: {cpu: v, mem: v}
+        fprintf(output,   "\"%lu\": {", timestamp);
+        for (unsigned long ds_idx = 0; ds_idx < ds_cnt; ds_idx++) {
+            fprintf(output,   " \"%s\": ", rrd.ds_def[ds_idx].ds_nam);
+            if (isnan(row_data[ds_idx])) {
+                fprintf(output, "null");
+            } else {
+                fprintf(output, "%.6lf", row_data[ds_idx]);
+            }
+            fprintf(output, "%s", ds_idx < ds_cnt - 1 ? "," : "");
+        }
+        fprintf(output, "}%s", row + 1 < rows ? "," : "");
+
+        free(row_data);
+    }
+
+    fprintf(output, "}%s}", rra_idx + 1 < rra_cnt ? "," : "");
+
+    return 0;
+}
+
+int rrd_fetch_all(int argc, const char **argv) {
+    struct optparse_long longopts[] = {
+        {"output", 'o', OPTPARSE_REQUIRED},
+        {"format", 'f', OPTPARSE_REQUIRED},
+        {0},
+    };
+
+    char *output_dir = NULL;
+    int output_format = 1; // 1: csv 2:json
+    int result = -1;
+
+    struct optparse options;
+    optparse_init(&options, argc, argv);
+    int opt;
+    while ((opt = optparse_long(&options, longopts, NULL)) != -1) {
+        switch (opt) {
+            case 'o':
+                if (options.optarg) {
+                    output_dir = strdup(options.optarg);
+                }
+                break;
+            case 'f':
+                if (options.optarg) {
+                    if (strcasecmp(options.optarg, "csv") == 0) {
+                        output_format = 1;
+                    } else if (strcasecmp(options.optarg, "json") == 0) {
+                        output_format = 2;
+                    } else {
+                        fprintf(stderr, "Unsupported format: %s please use [csv, json]\n", options.optarg);
+                        return -1;
+                    }
+                }
+                break;
+            case '?':
+                fprintf(stderr, "%s\n", options.errmsg);
+                return -1;
+        }
+    }
+
+    if (options.optind >= argc) {
+        fprintf(stderr, "Usage: rrdtool fetchall [--output DIR] filename.rrd\n");
+        return -1;
+    }
+
+    const char *filename = options.argv[options.optind];
+
+    rrd_file_t *rrd_file = NULL;
+    FILE *json_fp = stdout;
+
+    if (output_dir && rrd_mkdir_p(output_dir, 0755) != 0) {
+        fprintf(stderr, "Failed to create output dir: %s\n", output_dir);
+        goto done;
+    }
+
+    rrd_t rrd;
+    rrd_init(&rrd);
+    rrd_file = rrd_open(filename, &rrd, RRD_READONLY | RRD_LOCK);
+    if (!rrd_file) {
+        fprintf(stderr, "Failed to open RRD file(%s): %s\n", filename, rrd_get_error());
+        goto done;
+    }
+
+    unsigned long ds_cnt = rrd.stat_head->ds_cnt;
+    unsigned long rra_cnt = rrd.stat_head->rra_cnt;
+    off_t rra_base = rrd_file->header_len;
+
+    if (output_format == 2 ) { // json 文件创建
+        if (output_dir) {
+            char json_path[512];
+            snprintf(json_path, sizeof(json_path), "%s/output.json", output_dir);
+            json_fp = fopen(json_path, "w");
+            if (!json_fp) {
+                fprintf(stderr, "Failed to open json file: %s\n", json_path);
+                goto done;
+            }
+        }
+        fprintf(json_fp, "[");
+    }
+
+    for (unsigned long rra_idx = 0; rra_idx < rra_cnt; rra_idx++) {
+        rra_def_t *rra = &rrd.rra_def[rra_idx];
+        unsigned long rows = rra->row_cnt;
+        if (output_format == 1) { // csv 格式写入
+            output_to_csv(output_dir, rra_idx, rrd, rrd_file, rra_base);
+        } else if (output_format == 2) { // json 格式写入
+            output_to_json(json_fp, rra_idx, rrd, rrd_file, rra_base);
+        }
+        rra_base += rows * ds_cnt * sizeof(rrd_value_t);
+    }
+
+    if (output_format == 2) { // json 补充结尾
+        fprintf(json_fp, "]\n");
+        if (json_fp != stdout) {
+            printf("Wrote JSON: %s/output.json\n", output_dir);
+        }
+    }
+
+    result = 0;
+
+done:
+    if (output_dir) free(output_dir);
+    if (json_fp && json_fp != stdout) fclose(json_fp);
+    if (rrd_file) rrd_close(rrd_file);
+    rrd_free(&rrd);
+    return result;
 }

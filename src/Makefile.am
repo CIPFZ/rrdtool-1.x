@@ -21,6 +21,7 @@ UPD_C_FILES =		\
 	optparse.c	\
 	rrd_strtod.c	\
 	rrd_create.c	\
+	rrd_ds_operate.c \
 	hash_32.c	\
 	rrd_parsetime.c	\
 	rrd_hw.c	\

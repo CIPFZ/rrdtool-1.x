@@ -35,6 +35,7 @@ rrd_info_free
 rrd_info_print
 rrd_info_push
 rrd_info_r
+rrd_info_json_print
 rrd_init
 rrd_last
 rrd_last_r
@@ -96,3 +97,5 @@ rrdc_stats_free
 rrdc_stats_get
 rrdc_update
 _rrd_fopen
+rrd_update_ds
+rrd_fetch_all

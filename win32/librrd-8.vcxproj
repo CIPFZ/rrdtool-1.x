@@ -394,6 +394,7 @@
     <ClCompile Include="..\src\quicksort.c" />
     <ClCompile Include="..\src\rrd_client.c" />
     <ClCompile Include="..\src\rrd_create.c" />
+    <ClCompile Include="..\src\rrd_ds_operate.c" />
     <ClCompile Include="..\src\rrd_diff.c" />
     <ClCompile Include="..\src\rrd_dump.c" />
     <ClCompile Include="..\src\rrd_error.c" />

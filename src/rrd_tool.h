@@ -83,6 +83,20 @@ extern    "C" {
             char ***ds_namv,
             rrd_value_t **data);
 
+    int output_to_csv(
+        const char *output_dir,
+        unsigned long rra_idx,
+        rrd_t rrd,
+        rrd_file_t *rrd_file,
+        off_t rra_base);
+
+    int output_to_json(
+        FILE *output,
+        unsigned long rra_idx,
+        rrd_t rrd,
+        rrd_file_t *rrd_file,
+        off_t rra_base);
+
     int rrd_fetch_empty(
         time_t *start,
         time_t *end,

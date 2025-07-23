@@ -156,6 +156,8 @@ extern    "C" {
     int       rrd_create(
     int,
     const char **);
+    // 更新rrd文件中的某些ds
+    int rrd_update_ds(int, const char **);
     rrd_info_t *rrd_info(
     int,
     const char **);
@@ -202,6 +204,8 @@ extern    "C" {
     unsigned long *,
     char ***,
     rrd_value_t **);
+    // 获取所有的 rrd 时间点数据
+    int rrd_fetch_all(int, const char **);
     int       rrd_restore(
     int,
     const char **);
@@ -262,6 +266,8 @@ extern    "C" {
     int argc,
     const char **argv);
     rrd_info_t *rrd_info_r(
+    const char *);
+    int *rrd_info_json_print(
     const char *);
 /* NOTE: rrd_update_r and rrd_update_v_r are only thread-safe if no at-style
    time specifications get used!!! */

@@ -139,6 +139,11 @@ static void PrintUsage(
            "\t\t[-s|--start start] [-e|--end end]\n"
            "\t\t[-a|--align-start]\n" "\t\t[-d|--daemon <address>]\n");
 
+    const char *help_fetch_all =
+            N_("* fetchall - fetch all rra data out of an RRD\n\n"
+                "\trrdtool fetchall filename.rrd\n"
+                "\t\t[-o|--output output dir]\n");
+
     const char *help_flushcached =
         N_("* flushcached - flush cached data out to an RRD file\n\n"
            "\trrdtool flushcached filename.rrd\n"
@@ -263,11 +268,14 @@ static void PrintUsage(
         N_("RRDtool is distributed under the Terms of the GNU General\n"
            "Public License Version 2. (www.gnu.org/copyleft/gpl.html)\n\n"
            "For more information read the RRD manpages\n");
+    const char *help_update_ds =
+        N_("* create - Update ds in RRD file\n\n"
+           "\trrdtool updateds filename [DS:ds-name:DST:dst arguments] [DS:ds-name:DST:dst arguments]\n");
     enum { C_NONE, C_CREATE, C_DUMP, C_INFO, C_LIST, C_RESTORE, C_LAST,
         C_LASTUPDATE, C_FIRST, C_UPDATE, C_FETCH, C_GRAPH, C_GRAPHV,
         C_TUNE,
         C_RESIZE, C_XPORT, C_QUIT, C_LS, C_CD, C_MKDIR, C_PWD,
-        C_UPDATEV, C_FLUSHCACHED
+        C_UPDATEV, C_FLUSHCACHED, C_UPDATEDS, C_FETCHALL
     };
     int       help_cmd = C_NONE;
 
@@ -316,6 +324,10 @@ static void PrintUsage(
             help_cmd = C_MKDIR;
         else if (!strcmp(cmd, "pwd"))
             help_cmd = C_PWD;
+        else if (!strcmp(cmd, "updateds"))
+            help_cmd = C_UPDATEDS;
+        else if (!strcmp(cmd, "fetchall"))
+            help_cmd = C_FETCHALL;
     }
 #ifdef BUILD_DATE
     fprintf(stdout, _(help_main), PACKAGE_VERSION, BUILD_DATE);
@@ -403,6 +415,12 @@ static void PrintUsage(
         break;
     case C_PWD:
         puts(_(help_pwd));
+        break;
+    case C_UPDATEDS:
+        puts(_(help_update_ds));
+        break;
+    case C_FETCHALL:
+        puts(_(help_fetch_all));
         break;
     }
     puts(_(help_lic));
@@ -697,13 +715,14 @@ static int HandleInputLine(
         rrd_create(argc - 1, &argv[1]);
     else if (strcmp("dump", argv[1]) == 0)
         rrd_dump(argc - 1, &argv[1]);
-    else if (strcmp("info", argv[1]) == 0 || strcmp("updatev", argv[1]) == 0) {
-        rrd_info_t *data;
-
-        if (strcmp("info", argv[1]) == 0)
-            data = rrd_info(argc - 1, &argv[1]);
-        else
-            data = rrd_update_v(argc - 1, &argv[1]);
+    else if (strcmp("updateds", argv[1]) == 0)
+        rrd_update_ds(argc - 1, &argv[1]);
+    else if (strcmp("fetchall", argv[1]) == 0)
+        rrd_fetch_all(argc - 1, &argv[1]);
+    else if (strcmp("info", argv[1]) == 0) {
+        rrd_info(argc - 1, &argv[1]);
+    } else if (strcmp("updatev", argv[1]) == 0) {
+        rrd_info_t *data = rrd_update_v(argc - 1, &argv[1]);
         rrd_info_print(data);
         rrd_info_free(data);
     } else if (strcmp("list", argv[1]) == 0) {

@@ -93,20 +93,20 @@ AC_ARG_VAR(RRDGRAPH_YLEGEND_ANGLE,
 AC_DEFINE_UNQUOTED(RRDGRAPH_YLEGEND_ANGLE,${RRDGRAPH_YLEGEND_ANGLE:-90.0},
  [Vertical label angle: -90.0 (default) or 90.0])
 
-AC_ARG_ENABLE(docs,AS_HELP_STRING([--disable-docs],[disable building documentation]),
-[],[enable_docs=yes])
+AC_ARG_ENABLE(docs,AS_HELP_STRING([--enable-docs],[enable building documentation]),
+[],[enable_docs=no])
 
-AC_ARG_ENABLE(examples,AS_HELP_STRING([--disable-examples],[disable building of examples]),
-[],[enable_examples=yes])
+AC_ARG_ENABLE(examples,AS_HELP_STRING([--enable-examples],[enable building of examples]),
+[],[enable_examples=no])
 
 AC_ARG_ENABLE(rrdcached,AS_HELP_STRING([--disable-rrdcached],[disable building of rrdcached]),
 [],[enable_rrdcached=yes])
 
-AC_ARG_ENABLE(rrdcgi,AS_HELP_STRING([--disable-rrdcgi],[disable building of rrdcgi]),
-[],[enable_rrdcgi=yes])
+AC_ARG_ENABLE(rrdcgi,AS_HELP_STRING([--enable-rrdcgi],[enable building of rrdcgi]),
+[],[enable_rrdcgi=no])
 
-AC_ARG_ENABLE(rrd_graph,AS_HELP_STRING([--disable-rrd_graph],[disable all rrd_graph functions]),
-[enable_rrdcgi=$enableval],[enable_rrd_graph=yes])
+AC_ARG_ENABLE(rrd_graph,AS_HELP_STRING([--enable-rrd_graph],[enable all rrd_graph functions]),
+[enable_rrdcgi=$enableval],[enable_rrd_graph=no])
 
 AC_ARG_ENABLE(rrd_restore,AS_HELP_STRING([--disable-rrd_restore],[disable rrd_restore XML import functions]),
 [],[enable_rrd_restore=yes])
@@ -553,9 +553,9 @@ CONFIGURE_PART(Find 3rd-Party Libraries)
 
 have_libdbi=no
 
-AC_ARG_ENABLE(libdbi,AS_HELP_STRING([--disable-libdbi],[do not build in support for libdbi]),
+AC_ARG_ENABLE(libdbi,AS_HELP_STRING([--enable-libdbi],[build in support for libdbi]),
 [],
-[enable_libdbi=yes])
+[enable_libdbi=no])
 
 AS_IF([test "x$enable_libdbi" != xno], [
     AC_CHECK_HEADER(dbi/dbi.h, [
@@ -571,9 +571,9 @@ AM_CONDITIONAL(BUILD_LIBDBI,[test $have_libdbi != no])
 
 have_librados=no
 
-AC_ARG_ENABLE(librados,AS_HELP_STRING([--disable-librados],[do not build in support for librados]),
+AC_ARG_ENABLE(librados,AS_HELP_STRING([--enable-librados],[build in support for librados]),
 [],
-[enable_librados=yes])
+[enable_librados=no])
 
 AS_IF([test "x$enable_librados" != xno], [
     AC_CHECK_HEADER(rados/librados.h, [
@@ -693,8 +693,8 @@ dnl a.b999yymmddhh
 NUMVERS=m4_esyscmd([perl -ne 'my @x=split /\./;printf "%d.%d%03d", @x' VERSION])
 AC_SUBST(NUMVERS)
 
-AC_ARG_ENABLE(perl,AS_HELP_STRING([--disable-perl],[do not build the perl modules]),
-[],[enable_perl=yes])
+AC_ARG_ENABLE(perl,AS_HELP_STRING([--enable-perl],[build the perl modules]),
+[],[enable_perl=no])
 
 
 AC_ARG_VAR(PERLCC, [C compiler for Perl modules])
@@ -785,8 +785,8 @@ AC_SUBST(PERL_VERSION)
 dnl Check for Ruby.
 AC_PATH_PROG(RUBY, ruby, no)
 
-AC_ARG_ENABLE(ruby,AS_HELP_STRING([--disable-ruby],[do not build the ruby modules]),
-[],[enable_ruby=yes])
+AC_ARG_ENABLE(ruby,AS_HELP_STRING([--enable-ruby],[build the ruby modules]),
+[],[enable_ruby=no])
 
 AC_MSG_CHECKING(if ruby modules can be built)
 
@@ -824,8 +824,8 @@ AM_CONDITIONAL(BUILD_RUBY,[test $enable_ruby = "yes"])
 dnl Check for Lua.
 AC_PATH_PROG(LUA, lua, no)
 
-AC_ARG_ENABLE(lua,AS_HELP_STRING([--disable-lua],[do not build the lua modules]),
-[],[enable_lua=yes])
+AC_ARG_ENABLE(lua,AS_HELP_STRING([--enable-lua],[build the lua modules]),
+[],[enable_lua=no])
 
 COMP_LUA=
 if test "$LUA" = "no" -o "$enable_lua" = "no"; then
@@ -964,8 +964,8 @@ AM_CONDITIONAL(BUILD_LUA, [test "$enable_lua" = "yes"])
 
 enable_tcl_site=no
 
-AC_ARG_ENABLE(tcl,AS_HELP_STRING([--disable-tcl],[do not build the tcl modules]),
-[],[enable_tcl=yes])
+AC_ARG_ENABLE(tcl,AS_HELP_STRING([--enable-tcl],[build the tcl modules]),
+[],[enable_tcl=no])
 
 if test  "$enable_tcl" = "yes"; then
   dnl Check for Tcl.
@@ -1109,18 +1109,6 @@ AC_OUTPUT
 AC_MSG_CHECKING(in)
 AC_MSG_RESULT(and out again)
 
-echo $ECHO_N "ordering CD from https://tobi.oetiker.ch/wish $ECHO_C" 1>&6
-sleep 1
-echo $ECHO_N ".$ECHO_C" 1>&6
-sleep 1
-echo $ECHO_N ".$ECHO_C" 1>&6
-sleep 1
-echo $ECHO_N ".$ECHO_C" 1>&6
-sleep 1
-echo $ECHO_N ".$ECHO_C" 1>&6
-sleep 1
-AC_MSG_RESULT([ just kidding ;-)])
-echo
 echo "----------------------------------------------------------------"
 echo "Config is DONE!"
 echo

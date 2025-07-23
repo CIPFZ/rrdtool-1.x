@@ -48,6 +48,7 @@ RRD_LIB_OBJ_LIST = \
         $(TOP)/src/quicksort.obj \
         $(TOP)/src/rrd_client.obj \
         $(TOP)/src/rrd_create.obj \
+        $(TOP)/src/rrd_ds_operate.obj \
         $(TOP)/src/rrd_diff.obj \
         $(TOP)/src/rrd_dump.obj \
         $(TOP)/src/rrd_error.obj \
