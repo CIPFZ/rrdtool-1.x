@@ -21,9 +21,8 @@
 !/m4/snprintf.m4
 /aclocal.m4
 /autom4te.cache/
-
 # automake
-#Makefile.in
+Makefile.in
 #/rrd_config.h.in
 /ar-lib
 
@@ -53,7 +52,7 @@ compile_commands.json
 !/po/Makefile.in.in
 !/po/POTFILES.in
 !/po/remove-potcdate.sin
-
+bindings/Makefile.in
 # cscope
 /cscope.*
 
